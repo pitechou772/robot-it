@@ -19,8 +19,8 @@ class BLEApp:
     """
 
     def __init__(self, chassis, nom=config.BLE_NOM, mode_auto=None):
-        self._chassis   = chassis
-        self._mode_auto = mode_auto   # ModeAutonome ou None
+        self._chassis   = chassis    # peut etre None si moteur.py absent
+        self._mode_auto = mode_auto  # ModeAutonome ou None
         ble = bluetooth.BLE()
         self._peripherique = BLESimplePeripheral(ble, nom)
         self._peripherique.on_write(self._on_reception)
@@ -33,7 +33,8 @@ class BLEApp:
             print("Recu BLE:", msg)
 
             if msg == "O":
-                self._chassis.arreter()
+                if self._chassis is not None:
+                    self._chassis.arreter()
                 print("Action: STOP")
 
             elif msg == "AUTO":
@@ -49,7 +50,7 @@ class BLEApp:
             elif ":" in msg:
                 if self._mode_auto is not None and self._mode_auto.est_actif():
                     print("Commande ignoree : mode autonome actif")
-                else:
+                elif self._chassis is not None:
                     parties   = msg.split(":")
                     direction = parties[0]         # H, B, G, D
                     puissance = float(parties[1])  # 0.0 a 1.0
@@ -59,8 +60,7 @@ class BLEApp:
             else:
                 if self._mode_auto is not None and self._mode_auto.est_actif():
                     print("Commande ignoree : mode autonome actif")
-                else:
-                    # Commande simple sans puissance (pleine puissance par defaut)
+                elif self._chassis is not None:
                     self._chassis.executer_commande(msg, 1.0)
 
         except Exception as e:
