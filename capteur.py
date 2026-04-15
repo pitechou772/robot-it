@@ -1,86 +1,53 @@
-import time
-from machine import Pin, ADC
-import config
+# =============================================================================
+#  config.py  -  Configuration materielle du robot
+#  Modifie ce fichier pour adapter le code a ton cablage.
+# =============================================================================
 
+# --- MOTEUR GAUCHE (L293D canal A) ---
+# Physique 15 = GP11
+MOTEUR_GAUCHE_PWM = 7   # Enable A (signal PWM)
+# Physique 14 = GP10
+MOTEUR_GAUCHE_IN1 = 9   # Direction 1
+# Physique 13 = GP9
+MOTEUR_GAUCHE_IN2 = 8    # Direction 2
 
-class CapteurUltrason:
-    """
-    Capteur de distance ultrasonique HC-SR04.
+# --- MOTEUR DROIT (L293D canal B) ---
+# Physique 10 = GP7
+MOTEUR_DROIT_PWM  = 12    # Enable B (signal PWM)
+# Physique 11 = GP8
+MOTEUR_DROIT_IN1  = 11    # Direction 1
+# Physique 12 = GND (ATTENTION !)
+# /!\ ERREUR : La broche physique 12 est une masse (GND). 
+# Tu ne peux pas l'utiliser pour piloter un moteur.
+MOTEUR_DROIT_IN2  = 10   # CONSEIL : Déplace ce fil sur la broche physique 17 (GP13)
 
-    Brochage par defaut :
-      TRIG = Pin 2
-      ECHO = Pin 3
-    """
+# --- FREQUENCE PWM (Hz) ---
+MOTEUR_FREQUENCE  = 1000
 
-    def __init__(self, pin_trig=config.ULTRASON_TRIG, pin_echo=config.ULTRASON_ECHO, distance_max_cm=config.ULTRASON_MAX_CM):
-        self._trig = Pin(pin_trig, Pin.OUT)
-        self._echo = Pin(pin_echo, Pin.IN)
-        self._distance_max = distance_max_cm
-        self._trig.value(0)
+# --- CAPTEUR ULTRASON HC-SR04 ---
+ULTRASON_TRIG     = 2    # Broche TRIG
+ULTRASON_ECHO     = 3    # Broche ECHO
+ULTRASON_MAX_CM   = 400  # Distance maximale mesurable (cm)
 
-    def mesurer_distance(self):
-        """
-        Retourne la distance mesuree en centimetres (float).
-        Retourne None si hors portee ou timeout.
-        """
-        # Impulsion TRIG de 10 us
-        self._trig.value(0)
-        time.sleep_us(2)
-        self._trig.value(1)
-        time.sleep_us(10)
-        self._trig.value(0)
+# --- CAPTEURS DE LUMINOSITE (LDR) ---
+LUMINOSITE_ADC         = 26   # Broche ADC unique (retrocompatibilite)
+LUMINOSITE_GAUCHE_ADC  = 26   # ADC0 — LDR cote gauche du robot
+LUMINOSITE_DROITE_ADC  = 27   # ADC1 — LDR cote droit  du robot
 
-        # Attente front montant ECHO (timeout 30 ms)
-        debut_attente = time.ticks_us()
-        while self._echo.value() == 0:
-            if time.ticks_diff(time.ticks_us(), debut_attente) > 30000:
-                return None
-        debut = time.ticks_us()
+# --- BLUETOOTH ---
+BLE_NOM           = "UART-VAQ"  # Nom du robot visible en BLE (modifiable dans ton app)
 
-        # Attente front descendant ECHO (timeout 30 ms)
-        while self._echo.value() == 1:
-            if time.ticks_diff(time.ticks_us(), debut) > 30000:
-                return None
-        fin = time.ticks_us()
+# --- SEUILS ---
+SEUIL_OBSTACLE_CM = 20   # Arret d'urgence si obstacle detecte a moins de X cm
+SEUIL_SOMBRE_PCT  = 30   # Alerte si luminosite inferieure a X %
 
-        # Vitesse du son : 0.034 cm/us, aller-retour donc / 2
-        duree_us = time.ticks_diff(fin, debut)
-        distance = (duree_us * 0.034) / 2
+# --- TIMING ---
+INTERVALLE_CAPTEURS_MS = 500  # Periode de lecture des capteurs (ms)
 
-        if distance > self._distance_max:
-            return None
-        return round(distance, 1)
+# --- MODE AUTONOME ---
+AUTO_PUISSANCE_SUIVI  = 0.6  # Puissance moteur en suivi de lumiere (0.0 a 1.0)
+AUTO_PUISSANCE_EVIT   = 0.7  # Puissance moteur pendant l'evitement d'obstacle
+AUTO_SEUIL_DIFF_LDR   = 5.0  # Ecart minimum (%) entre LDR gauche/droite pour tourner
+AUTO_DUREE_RECUL_MS   = 500  # Duree de la phase de recul lors de l'evitement (ms)
+AUTO_DUREE_PIVOT_MS   = 600  # Duree de la phase de pivot lors de l'evitement (ms)
 
-    def obstacle_detecte(self, seuil_cm=20):
-        """Retourne True si un obstacle est detecte a moins de seuil_cm."""
-        dist = self.mesurer_distance()
-        if dist is None:
-            return False
-        return dist < seuil_cm
-
-
-class CapteurLuminosite:
-    """
-    Capteur de luminosite via photoresistance (LDR) sur entree ADC.
-
-    Brochage par defaut :
-      ADC = Pin 26  (ADC0 sur Pico W)
-
-    Montage attendu : diviseur de tension avec pull-down.
-    Plus la lumiere est forte, plus la tension (et la valeur ADC) est elevee.
-    """
-
-    def __init__(self, pin_adc=config.LUMINOSITE_ADC):
-        self._adc = ADC(Pin(pin_adc))
-
-    def lire_brut(self):
-        """Retourne la valeur brute ADC (0 a 65535)."""
-        return self._adc.read_u16()
-
-    def lire_pourcentage(self):
-        """Retourne la luminosite en pourcentage (0 % = sombre, 100 % = lumineux)."""
-        return round((self._adc.read_u16() / 65535) * 100, 1)
-
-    def est_sombre(self, seuil_pct=30):
-        """Retourne True si la luminosite est inferieure au seuil (en %)."""
-        return self.lire_pourcentage() < seuil_pct

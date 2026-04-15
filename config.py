@@ -4,14 +4,22 @@
 # =============================================================================
 
 # --- MOTEUR GAUCHE (L293D canal A) ---
-MOTEUR_GAUCHE_PWM = 15   # Enable A (signal PWM)
-MOTEUR_GAUCHE_IN1 = 14   # Direction 1
-MOTEUR_GAUCHE_IN2 = 13   # Direction 2
+# Physique 15 = GP11
+MOTEUR_GAUCHE_PWM = 11   # Enable A (signal PWM)
+# Physique 14 = GP10
+MOTEUR_GAUCHE_IN1 = 10   # Direction 1
+# Physique 13 = GP9
+MOTEUR_GAUCHE_IN2 = 12    # Direction 2
 
 # --- MOTEUR DROIT (L293D canal B) ---
-MOTEUR_DROIT_PWM  = 10   # Enable B (signal PWM)
-MOTEUR_DROIT_IN1  = 11   # Direction 1
-MOTEUR_DROIT_IN2  = 12   # Direction 2
+# Physique 10 = GP7
+MOTEUR_DROIT_PWM  = 7    # Enable B (signal PWM)
+# Physique 11 = GP8
+MOTEUR_DROIT_IN1  = 8    # Direction 1
+# Physique 12 = GND (ATTENTION !)
+# /!\ ERREUR : La broche physique 12 est une masse (GND). 
+# Tu ne peux pas l'utiliser pour piloter un moteur.
+MOTEUR_DROIT_IN2  = 9   # CONSEIL : Déplace ce fil sur la broche physique 17 (GP13)
 
 # --- FREQUENCE PWM (Hz) ---
 MOTEUR_FREQUENCE  = 1000
