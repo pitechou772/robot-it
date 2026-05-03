@@ -33,5 +33,6 @@ while True:
             chassis.arreter()
 
     ble_connecte_prec = connecte
+    ble.tick()
 
     time.sleep_ms(50)
