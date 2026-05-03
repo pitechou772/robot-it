@@ -85,12 +85,13 @@ class BLEApp:
             # --- Nombre = mise a jour du slider ---
             elif self._est_nombre(msg):
                 puissance = max(0.0, min(1.0, float(msg)))
-                self._puissance = puissance
                 if puissance == 0.0 or self._direction is None:
                     self._direction = None
                     self._chassis.arreter()
                     print("[BLE] Slider -> 0% => STOP")
+                    # _puissance n'est PAS remis a 0 : on garde la derniere valeur utile
                 else:
+                    self._puissance = puissance
                     print("[BLE] Slider -> {} {}%".format(self._direction, int(puissance * 100)))
                     self._chassis.executer_commande(self._direction, puissance)
 

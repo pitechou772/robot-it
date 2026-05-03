@@ -35,9 +35,9 @@ class ChassisMoteur:
     """
     Controle les deux moteurs du robot (gauche et droit).
 
-    Brochage L293D :
-      Moteur gauche : enA=15 (PWM), in1=14, in2=13
-      Moteur droit  : enB=10 (PWM), in3=11, in4=12
+    Brochage L293D (numeros GP) :
+      Moteur gauche : PWM=GP11, IN1=GP10, IN2=GP12
+      Moteur droit  : PWM=GP7,  IN1=GP8,  IN2=GP9
     """
 
     def __init__(self):
