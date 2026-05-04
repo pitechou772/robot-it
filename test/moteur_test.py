@@ -32,12 +32,15 @@ def motorMove(speed, direction, speedGP, cwGP, acwGP):
         acw.value(0)
 
 print("Test : avance 3 sec")
-motorMove(60, 1, pwmPIN, cwPin, acwPin)
+motorMove(60, 1, pwmPIN1, cwPin1, acwPin1)
+motorMove(60, 1, pwmPIN2, cwPin2, acwPin2)
 sleep(3)
 
 print("Test : recule 3 sec")
-motorMove(60, -1, pwmPIN, cwPin, acwPin)
+motorMove(60, -1, pwmPIN1, cwPin1, acwPin1)
+motorMove(60, -1, pwmPIN2, cwPin2, acwPin2)
 sleep(3)
 
 print("Stop")
-motorMove(0, 0, pwmPIN, cwPin, acwPin)
+motorMove(0, 0, pwmPIN1, cwPin1, acwPin1)
+motorMove(0, 0, pwmPIN2, cwPin2, acwPin2)

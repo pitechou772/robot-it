@@ -29,8 +29,9 @@ class BLEApp:
     def __init__(self, chassis, nom=config.BLE_NOM, mode_auto=None):
         self._chassis    = chassis    # peut etre None si moteur.py absent
         self._mode_auto  = mode_auto  # ModeAutonome ou None
-        self._direction  = None       # direction active (H/B/G/D) ou None si arrete
-        self._puissance  = 0.5        # puissance courante du slider (0.0 a 1.0)
+        self._direction     = None   # direction active (H/B/G/D) ou None si arrete
+        self._puissance     = 0.5   # puissance courante du slider (0.0 a 1.0)
+        self._slider_actif  = False  # True quand le slider a depasse 0 au moins une fois
         ble = bluetooth.BLE()
         self._peripherique = BLESimplePeripheral(ble, nom)
         self._peripherique.on_write(self._on_reception)
@@ -97,17 +98,21 @@ class BLEApp:
             # --- Nombre = mise a jour du slider ---
             elif self._est_nombre(msg):
                 puissance = max(0.0, min(1.0, float(msg)))
-                if puissance == 0.0 or self._direction is None:
+                if puissance > 0.0:
+                    self._slider_actif = True
+                    self._puissance = puissance
+                    if self._direction is not None:
+                        log("[BLE] Slider -> {} {}%".format(self._direction, int(puissance * 100)))
+                        self._chassis.executer_commande(self._direction, puissance)
+                elif self._slider_actif or self._direction is None:
+                    self._slider_actif = False
                     self._direction = None
                     self._chassis.arreter()
                     log("[BLE] Slider -> 0% => STOP")
-                else:
-                    self._puissance = puissance
-                    log("[BLE] Slider -> {} {}%".format(self._direction, int(puissance * 100)))
-                    self._chassis.executer_commande(self._direction, puissance)
 
             # --- Lettre = nouvelle direction, demarre immediatement ---
             else:
+                self._slider_actif = False
                 direction = self._ALIAS_DIR.get(msg, msg)
                 self._direction = direction
                 log("[BLE] Direction -> {} {}%".format(direction, int(self._puissance * 100)))
