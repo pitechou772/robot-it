@@ -2,154 +2,156 @@ import time
 import config
 
 # ---------------------------------------------------------------------------
-# Constantes d'etat (entiers pour eviter les comparaisons de chaines)
+# Etats principaux
 # ---------------------------------------------------------------------------
-ETAT_ARRET     = 0
-ETAT_SUIVI     = 1
-ETAT_EVITEMENT = 2
+ETAT_ARRET  = 0
+ETAT_AVANCE = 1   # avance tout droit, servo centre
+ETAT_SCAN   = 2   # servo scanne gauche puis droite pour choisir une direction
+ETAT_TOURNE = 3   # pivot en cours (gauche ou droite)
+ETAT_RECULE = 4   # recul en cours (chemin bloque des deux cotes)
 
-PHASE_RECUL = 0
-PHASE_PIVOT = 1
+# Sous-etats du scan
+_SCAN_GAUCHE       = 0   # servo va a gauche, on attend
+_SCAN_MES_GAUCHE   = 1   # on mesure a gauche, servo va a droite
+_SCAN_MES_DROITE   = 2   # on mesure a droite, servo centre, on decide
 
 
 class ModeAutonome:
     """
-    Mode autonome du robot : suivi de lumiere avec evitement d'obstacles.
+    Mode autonome avec servo-scanner : le capteur ultrason est monte sur un
+    servo qui balaie gauche/centre/droite pour choisir la meilleure voie.
 
-    Principe du debrayage :
-      En etat SUIVI, si un obstacle est detecte, le mode debraye
-      (suspend le suivi), execute une manoeuvre d'evitement en deux phases
-      (recul puis pivot), puis reembraye automatiquement vers le SUIVI.
+    Machine a etats :
+      AVANCE  -> obstacle detecte         -> SCAN
+      SCAN    -> voie libre trouvee       -> TOURNE
+      SCAN    -> bloque partout           -> RECULE
+      TOURNE  -> duree ecoulee            -> AVANCE
+      RECULE  -> duree ecoulee            -> SCAN  (re-evaluate)
 
     Activation / desactivation via BLE :
       Commande "AUTO"   -> activer()
       Commande "MANUEL" -> desactiver()
 
-    La methode mise_a_jour() doit etre appelee a chaque iteration
-    de la boucle principale pour garantir la precision du timing.
+    Appeler mise_a_jour() a chaque iteration de la boucle principale.
     """
 
-    def __init__(self, chassis, capteur_ultrason, ldr_gauche, ldr_droite):
-        """
-        Parameters
-        ----------
-        chassis           : ChassisMoteur
-        capteur_ultrason  : CapteurUltrason
-        ldr_gauche        : CapteurLuminosite  (LDR cote gauche, ADC0)
-        ldr_droite        : CapteurLuminosite  (LDR cote droit,  ADC1)
-        """
-        self._chassis   = chassis
-        self._ultrason  = capteur_ultrason
-        self._ldr_g     = ldr_gauche
-        self._ldr_d     = ldr_droite
+    def __init__(self, chassis, capteur_ultrason, servo):
+        self._chassis  = chassis
+        self._ultrason = capteur_ultrason
+        self._servo    = servo
 
-        self._etat            = ETAT_ARRET
-        self._phase_evitement = PHASE_RECUL
-        self._t_phase_debut   = 0      # ticks_ms() au debut de la phase courante
-        self._cote_pivot      = "D"    # "G" ou "D", determine lors du debrayage
+        self._etat        = ETAT_ARRET
+        self._sous_etat   = _SCAN_GAUCHE
+        self._t_debut     = 0
+        self._cote_pivot  = "G"
+        self._d_gauche    = 0.0
+        self._d_droite    = 0.0
 
     # ------------------------------------------------------------------
     # API publique
     # ------------------------------------------------------------------
 
     def activer(self):
-        """Active le mode autonome (passe en SUIVI)."""
         if self._etat == ETAT_ARRET:
-            self._etat = ETAT_SUIVI
-            print("[AUTO] Mode autonome ACTIVE")
+            self._servo.centrer()
+            self._etat = ETAT_AVANCE
+            print("[AUTO] Actif - AVANCE")
 
     def desactiver(self):
-        """Desactive le mode autonome et arrete les moteurs."""
         self._etat = ETAT_ARRET
+        self._servo.centrer()
         self._chassis.arreter()
-        print("[AUTO] Mode autonome DESACTIVE")
+        print("[AUTO] Desactive")
 
     def est_actif(self):
-        """Retourne True si le robot est en SUIVI ou EVITEMENT."""
         return self._etat != ETAT_ARRET
 
     def mise_a_jour(self):
-        """
-        Dispatcher principal de la machine a etats.
-        Doit etre appele a chaque iteration de la boucle principale.
-        """
-        if self._etat == ETAT_SUIVI:
-            self._executer_suivi()
-        elif self._etat == ETAT_EVITEMENT:
-            self._executer_evitement()
-        # ETAT_ARRET : rien a faire
+        if self._etat == ETAT_AVANCE:
+            self._avancer()
+        elif self._etat == ETAT_SCAN:
+            self._scanner()
+        elif self._etat == ETAT_TOURNE:
+            self._tourner()
+        elif self._etat == ETAT_RECULE:
+            self._reculer()
 
     # ------------------------------------------------------------------
     # Logique interne
     # ------------------------------------------------------------------
 
-    def _executer_suivi(self):
-        """
-        Suivi de lumiere differentiel.
-        Verifie l'obstacle en priorite — declenche le debrayage si besoin.
-        """
-        # 1. Detection d'obstacle (debrayage)
-        if self._ultrason.obstacle_detecte(config.SEUIL_OBSTACLE_CM):
-            self._declencher_evitement()
-            return
-
-        # 2. Lecture differentielle des deux LDR
-        lux_g = self._ldr_g.lire_pourcentage()
-        lux_d = self._ldr_d.lire_pourcentage()
-        diff  = lux_g - lux_d   # positif => gauche plus lumineuse
-
-        # 3. Commande du chassis
-        if diff > config.AUTO_SEUIL_DIFF_LDR:
-            # Lumiere a gauche : tourner a gauche
-            self._chassis.tourner_gauche(config.AUTO_PUISSANCE_SUIVI)
-        elif diff < -config.AUTO_SEUIL_DIFF_LDR:
-            # Lumiere a droite : tourner a droite
-            self._chassis.tourner_droite(config.AUTO_PUISSANCE_SUIVI)
+    def _avancer(self):
+        dist = self._ultrason.mesurer_distance()
+        if dist is not None and dist < config.SEUIL_OBSTACLE_CM:
+            self._chassis.arreter()
+            print("[AUTO] Obstacle a {} cm - SCAN".format(dist))
+            self._lancer_scan()
         else:
-            # Lumiere centree : avancer
             self._chassis.avancer(config.AUTO_PUISSANCE_SUIVI)
 
-    def _declencher_evitement(self):
-        """
-        Debrayage : suspend le suivi et demarre la manoeuvre d'evitement.
-        Le pivot se fait vers le cote le moins eclaire : l'obstacle bloque
-        la lumiere de ce cote, donc on s'ecarte dans la direction opposee.
-        """
-        lux_g = self._ldr_g.lire_pourcentage()
-        lux_d = self._ldr_d.lire_pourcentage()
-        # Pivoter vers le cote le moins eclaire
-        self._cote_pivot = "D" if lux_g >= lux_d else "G"
+    def _lancer_scan(self):
+        self._etat      = ETAT_SCAN
+        self._sous_etat = _SCAN_GAUCHE
+        self._servo.gauche()
+        self._t_debut = time.ticks_ms()
 
-        self._etat            = ETAT_EVITEMENT
-        self._phase_evitement = PHASE_RECUL
-        self._t_phase_debut   = time.ticks_ms()
-        self._chassis.reculer(config.AUTO_PUISSANCE_EVIT)
-        print("[AUTO] DEBRAYAGE - debut evitement (pivot: {})".format(self._cote_pivot))
+    def _scanner(self):
+        elapsed = time.ticks_diff(time.ticks_ms(), self._t_debut)
 
-    def _executer_evitement(self):
-        """
-        Manoeuvre d'evitement en deux phases :
-          Phase 1 (RECUL)  : reculer pendant AUTO_DUREE_RECUL_MS
-          Phase 2 (PIVOT)  : pivoter pendant AUTO_DUREE_PIVOT_MS
-          Fin              : retour en SUIVI (reembrayage)
-        """
-        maintenant = time.ticks_ms()
-        elapsed    = time.ticks_diff(maintenant, self._t_phase_debut)
+        if self._sous_etat == _SCAN_GAUCHE:
+            if elapsed >= config.SERVO_DELAI_MS:
+                d = self._ultrason.mesurer_distance()
+                self._d_gauche = d if d is not None else 0.0
+                print("[AUTO] Scan gauche : {} cm".format(self._d_gauche))
+                self._servo.droite()
+                self._t_debut   = time.ticks_ms()
+                self._sous_etat = _SCAN_MES_GAUCHE
 
-        if self._phase_evitement == PHASE_RECUL:
-            if elapsed >= config.AUTO_DUREE_RECUL_MS:
-                # Transition vers la phase pivot
-                self._phase_evitement = PHASE_PIVOT
-                self._t_phase_debut   = maintenant
-                if self._cote_pivot == "G":
-                    self._chassis.tourner_gauche(config.AUTO_PUISSANCE_EVIT)
-                else:
-                    self._chassis.tourner_droite(config.AUTO_PUISSANCE_EVIT)
-                print("[AUTO] Evitement - phase PIVOT ({})".format(self._cote_pivot))
+        elif self._sous_etat == _SCAN_MES_GAUCHE:
+            if elapsed >= config.SERVO_DELAI_MS:
+                d = self._ultrason.mesurer_distance()
+                self._d_droite = d if d is not None else 0.0
+                print("[AUTO] Scan droite : {} cm".format(self._d_droite))
+                self._servo.centrer()
+                self._t_debut   = time.ticks_ms()
+                self._sous_etat = _SCAN_MES_DROITE
 
-        elif self._phase_evitement == PHASE_PIVOT:
-            if elapsed >= config.AUTO_DUREE_PIVOT_MS:
-                # Manoeuvre terminee : reembrayage vers SUIVI
-                self._etat = ETAT_SUIVI
-                print("[AUTO] Evitement termine - REEMBRAYAGE vers SUIVI")
-                # Le prochain appel a _executer_suivi() reprendra le suivi
+        elif self._sous_etat == _SCAN_MES_DROITE:
+            if elapsed >= config.SERVO_DELAI_MS // 2:
+                self._decider()
+
+    def _decider(self):
+        dg = self._d_gauche
+        dd = self._d_droite
+        marge = config.SERVO_MARGE_CM
+
+        if dg <= marge and dd <= marge:
+            # Bloque des deux cotes : reculer
+            print("[AUTO] Bloque partout - RECULE")
+            self._chassis.reculer(config.AUTO_PUISSANCE_EVIT)
+            self._etat    = ETAT_RECULE
+            self._t_debut = time.ticks_ms()
+        elif dg >= dd:
+            print("[AUTO] Voie gauche plus libre ({} > {}) - TOURNE G".format(dg, dd))
+            self._cote_pivot = "G"
+            self._chassis.tourner_gauche(config.AUTO_PUISSANCE_EVIT)
+            self._etat    = ETAT_TOURNE
+            self._t_debut = time.ticks_ms()
+        else:
+            print("[AUTO] Voie droite plus libre ({} > {}) - TOURNE D".format(dd, dg))
+            self._cote_pivot = "D"
+            self._chassis.tourner_droite(config.AUTO_PUISSANCE_EVIT)
+            self._etat    = ETAT_TOURNE
+            self._t_debut = time.ticks_ms()
+
+    def _tourner(self):
+        if time.ticks_diff(time.ticks_ms(), self._t_debut) >= config.AUTO_DUREE_PIVOT_MS:
+            print("[AUTO] Pivot termine - AVANCE")
+            self._etat = ETAT_AVANCE
+            self._chassis.avancer(config.AUTO_PUISSANCE_SUIVI)
+
+    def _reculer(self):
+        if time.ticks_diff(time.ticks_ms(), self._t_debut) >= config.AUTO_DUREE_RECUL_MS:
+            print("[AUTO] Recul termine - SCAN")
+            self._chassis.arreter()
+            self._lancer_scan()

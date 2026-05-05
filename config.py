@@ -26,6 +26,14 @@ LUMINOSITE_ADC         = 26   # Broche ADC unique (retrocompatibilite)
 LUMINOSITE_GAUCHE_ADC  = 26   # ADC0 — LDR cote gauche du robot
 LUMINOSITE_DROITE_ADC  = 27   # ADC1 — LDR cote droit  du robot
 
+# --- SERVO MOTEUR (capteur ultrason monté dessus) ---
+SERVO_PIN          = 18   # Broche PWM du servo
+SERVO_ANGLE_CENTRE = 90   # Position centrale (face avant)
+SERVO_ANGLE_GAUCHE = 150  # Position scan gauche
+SERVO_ANGLE_DROITE = 30   # Position scan droite
+SERVO_DELAI_MS     = 400  # Attente apres deplacement du servo (ms)
+SERVO_MARGE_CM     = 15   # Ecart minimum entre gauche/droite pour choisir une direction
+
 # --- BLUETOOTH ---
 BLE_NOM           = "UART-VAQ"  # Nom du robot visible en BLE (modifiable dans ton app)
 
