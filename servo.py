@@ -1,54 +1,89 @@
 from machine import Pin, PWM
+import time
 import config
 
 
 class ServoMoteur:
     """
-    Controle un servomoteur standard via PWM 50 Hz.
+    Controle un servo a rotation continue (CR) via PWM 50 Hz.
 
-    Plage angulaire : 0 a 180 degres.
-      0 deg   = impulsion 500 us  (tout a droite du robot)
-      90 deg  = impulsion 1500 us (centre, face avant)
-      180 deg = impulsion 2500 us (tout a gauche du robot)
+    Calibration requise : a 1500 us le servo doit etre completement a l'arret.
+    La position est estimee par suivi des rotations temporisees.
 
     Brochage par defaut : SERVO_PIN defini dans config.py
     """
 
-    _FREQ_HZ    = 50       # frequence standard servo
-    _US_MIN     = 500      # largeur impulsion a 0 deg
-    _US_MAX     = 2500     # largeur impulsion a 180 deg
-    _PERIODE_US = 20000    # periode = 1 / 50 Hz = 20 000 us
+    _FREQ_HZ    = 50
+    _STOP_US    = 1500
+    _PERIODE_US = 20000
 
     def __init__(self, pin=config.SERVO_PIN):
         self._pwm = PWM(Pin(pin))
         self._pwm.freq(self._FREQ_HZ)
-        self._angle = None
-        self.aller_a(config.SERVO_ANGLE_CENTRE)
+        self._position = "centre"
+        self._set_pwm(self._STOP_US)
+
+    def _set_pwm(self, us):
+        self._pwm.duty_u16(int(us / self._PERIODE_US * 65535))
+
+    def _tourner(self, us_offset, duree_ms):
+        self._set_pwm(self._STOP_US + us_offset)
+        time.sleep_ms(duree_ms)
+        self._set_pwm(self._STOP_US)
 
     def aller_a(self, angle):
-        """Positionne le servo a l'angle voulu (0-180 deg)."""
+        """Rotation temporisee proportionnelle a la distance depuis la position courante."""
         angle = max(0, min(180, angle))
-        self._angle = angle
-        us    = self._US_MIN + (angle / 180) * (self._US_MAX - self._US_MIN)
-        duty  = int(us / self._PERIODE_US * 65535)
-        self._pwm.duty_u16(duty)
+        if self._position == "gauche":
+            angle_actuel = config.SERVO_ANGLE_GAUCHE
+        elif self._position == "droite":
+            angle_actuel = config.SERVO_ANGLE_DROITE
+        else:
+            angle_actuel = config.SERVO_ANGLE_CENTRE
+        diff = angle - angle_actuel
+        if abs(diff) < 5:
+            return
+        duree = int(abs(diff) / 90 * config.SERVO_DELAI_MS)
+        self._tourner(config.SERVO_VITESSE_US if diff > 0 else -config.SERVO_VITESSE_US, duree)
+        if angle <= 45:
+            self._position = "droite"
+        elif angle >= 135:
+            self._position = "gauche"
+        else:
+            self._position = "centre"
 
     def centrer(self):
-        """Revient a la position centrale (90 deg)."""
-        self.aller_a(config.SERVO_ANGLE_CENTRE)
+        """Revient en position centrale."""
+        if self._position == "gauche":
+            self._tourner(-config.SERVO_VITESSE_US, config.SERVO_DELAI_MS)
+        elif self._position == "droite":
+            self._tourner(config.SERVO_VITESSE_US, config.SERVO_DELAI_MS)
+        self._position = "centre"
 
     def gauche(self):
         """Oriente le capteur vers la gauche."""
-        self.aller_a(config.SERVO_ANGLE_GAUCHE)
+        if self._position == "droite":
+            self._tourner(config.SERVO_VITESSE_US, config.SERVO_DELAI_MS * 2)
+        elif self._position == "centre":
+            self._tourner(config.SERVO_VITESSE_US, config.SERVO_DELAI_MS)
+        self._position = "gauche"
 
     def droite(self):
         """Oriente le capteur vers la droite."""
-        self.aller_a(config.SERVO_ANGLE_DROITE)
+        if self._position == "gauche":
+            self._tourner(-config.SERVO_VITESSE_US, config.SERVO_DELAI_MS * 2)
+        elif self._position == "centre":
+            self._tourner(-config.SERVO_VITESSE_US, config.SERVO_DELAI_MS)
+        self._position = "droite"
 
     @property
     def angle(self):
-        return self._angle
+        if self._position == "gauche":
+            return config.SERVO_ANGLE_GAUCHE
+        elif self._position == "droite":
+            return config.SERVO_ANGLE_DROITE
+        return config.SERVO_ANGLE_CENTRE
 
     def desactiver(self):
-        """Coupe le signal PWM (economie d'energie, evite le bruit)."""
+        """Coupe le signal PWM."""
         self._pwm.duty_u16(0)

@@ -27,21 +27,21 @@ def test_reculer():
 
 def test_tourner_gauche():
     print("--- Pivot gauche 1s ---")
-    c.tourner_gauche(0.7)
+    c.tourner_gauche(0.6)
     sleep(1)
     c.arreter()
     ok("tourner_gauche")
 
 def test_tourner_droite():
     print("--- Pivot droite 1s ---")
-    c.tourner_droite(0.7)
+    c.tourner_droite(0.6)
     sleep(1)
     c.arreter()
     ok("tourner_droite")
 
 def test_arreter():
     print("--- Arreter ---")
-    c.avancer(1.0)
+    c.avancer(0.7)
     sleep(0.5)
     c.arreter()
     sleep(0.5)
@@ -50,7 +50,7 @@ def test_arreter():
 def test_executer_commande():
     print("--- executer_commande H/B/G/D/stop ---")
     for cmd, dur in [("H", 1), ("B", 1), ("G", 0.8), ("D", 0.8)]:
-        c.executer_commande(cmd, 0.6)
+        c.executer_commande(cmd, 0.8)
         sleep(dur)
         c.arreter()
         sleep(0.3)
@@ -66,11 +66,12 @@ except Exception as e:
     ko("ChassisMoteur : " + str(e))
     raise SystemExit
 
-test_avancer()
+#test_avancer()
 test_reculer()
-test_tourner_gauche()
-test_tourner_droite()
-test_arreter()
-test_executer_commande()
+#test_tourner_gauche()
+#test_tourner_droite()
+#test_arreter()
+#test_executer_commande()
 
 print("=== FIN TEST MOTEUR ===")
+

@@ -17,12 +17,12 @@ print("=== TEST CAPTEUR ULTRASON ===")
 
 try:
     u = CapteurUltrason()
-    ok("CapteurUltrason cree (TRIG=GP{}, ECHO=GP{})".format(
-        config.ULTRASON_TRIG, config.ULTRASON_ECHO))
+    ok("CapteurUltrason cree (SIG=GP{})".format(config.ULTRASON_TRIG))
 except Exception as e:
     ko("CapteurUltrason : " + str(e))
     raise SystemExit
-
+print("Starting...")
+time.sleep(5000)
 # --- 10 mesures de distance ---
 print("--- 10 mesures (place un objet devant le capteur) ---")
 mesures_valides = 0

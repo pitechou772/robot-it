@@ -28,10 +28,10 @@ except Exception as e:
     print("ERREUR ultrason:", e)
 
 mode_auto = None
-if chassis is not None and ultrason is not None and servo is not None:
+if chassis is not None and ultrason is not None:
     try:
         from mode_auto import ModeAutonome
-        mode_auto = ModeAutonome(chassis, ultrason, servo)
+        mode_auto = ModeAutonome(chassis, ultrason)
         print("Mode autonome OK")
     except Exception as e:
         print("ERREUR mode_auto:", e)

@@ -12,33 +12,35 @@ class CapteurUltrason:
       ECHO = Pin 3
     """
 
-    def __init__(self, pin_trig=config.ULTRASON_TRIG, pin_echo=config.ULTRASON_ECHO, distance_max_cm=config.ULTRASON_MAX_CM):
-        self._trig = Pin(pin_trig, Pin.OUT)
-        self._echo = Pin(pin_echo, Pin.IN)
+    def __init__(self, pin_sig=config.ULTRASON_TRIG, distance_max_cm=config.ULTRASON_MAX_CM):
+        self._pin_num = pin_sig
         self._distance_max = distance_max_cm
-        self._trig.value(0)
 
     def mesurer_distance(self):
         """
         Retourne la distance mesuree en centimetres (float).
         Retourne None si hors portee ou timeout.
         """
-        # Impulsion TRIG de 10 us
-        self._trig.value(0)
+        # Impulsion TRIG de 10 us (pin en sortie)
+        pin = Pin(self._pin_num, Pin.OUT)
+        pin.value(0)
         time.sleep_us(2)
-        self._trig.value(1)
+        pin.value(1)
         time.sleep_us(10)
-        self._trig.value(0)
+        pin.value(0)
+
+        # Basculer en entree pour lire l'echo
+        pin = Pin(self._pin_num, Pin.IN)
 
         # Attente front montant ECHO (timeout 30 ms)
         debut_attente = time.ticks_us()
-        while self._echo.value() == 0:
+        while pin.value() == 0:
             if time.ticks_diff(time.ticks_us(), debut_attente) > 30000:
                 return None
         debut = time.ticks_us()
 
         # Attente front descendant ECHO (timeout 30 ms)
-        while self._echo.value() == 1:
+        while pin.value() == 1:
             if time.ticks_diff(time.ticks_us(), debut) > 30000:
                 return None
         fin = time.ticks_us()
