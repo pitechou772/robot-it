@@ -26,10 +26,10 @@ class BLEApp:
     """
 
     _ALIAS_DIR = {"A": "H", "F": "H"}
-
-    def __init__(self, chassis, nom=config.BLE_NOM, mode_auto=None):
+    def __init__(self, chassis, nom=config.BLE_NOM, mode_auto=None, mode_lumiere=None):
         self._chassis       = chassis
         self._mode_auto     = mode_auto
+        self._mode_lumiere  = mode_lumiere  # Ajout du mode lumière
         self._direction     = None
         self._puissance     = 0.5
         self._slider_actif  = False
@@ -65,9 +65,25 @@ class BLEApp:
                 log("[BLE] ATTENTION: chassis=None, moteur.py absent")
                 return
 
-            if self._mode_auto is not None and self._mode_auto.est_actif():
+            # --- Interception de la commande "3" pour le Suivi de Lumière ---
+            if msg == "3":
+                if self._mode_lumiere is not None:
+                    if self._mode_lumiere.est_actif():
+                        self._mode_lumiere.desactiver()
+                        self.envoyer("MODE:MANUEL")
+                    else:
+                        # On coupe le mode auto classique s'il tournait
+                        if self._mode_auto is not None:
+                            self._mode_auto.desactiver()
+                        self._mode_lumiere.activer()
+                        self.envoyer("MODE:LUMIERE")
+                return
+
+            # Bloquer les commandes manuelles si l'un des deux modes autonomes tourne
+            if (self._mode_auto is not None and self._mode_auto.est_actif()) or \
+               (self._mode_lumiere is not None and self._mode_lumiere.est_actif()):
                 if msg not in ("MANUEL", "O", "S", "X"):
-                    log("[BLE] Ignore (mode autonome actif)")
+                    log("[BLE] Ignore (mode autonome ou lumière actif)")
                     return
 
             # --- Commandes textuelles ---
@@ -78,6 +94,8 @@ class BLEApp:
 
             elif msg == "AUTO":
                 if self._mode_auto is not None:
+                    if self._mode_lumiere is not None:
+                        self._mode_lumiere.desactiver()
                     self._mode_auto.activer()
                     self.envoyer("MODE:AUTO")
                     log("[BLE] Mode autonome active")
@@ -87,10 +105,10 @@ class BLEApp:
             elif msg == "MANUEL":
                 if self._mode_auto is not None:
                     self._mode_auto.desactiver()
-                    self.envoyer("MODE:MANUEL")
-                    log("[BLE] Mode manuel active")
-                else:
-                    log("[BLE] MANUEL ignore (mode_auto absent)")
+                if self._mode_lumiere is not None:
+                    self._mode_lumiere.desactiver()
+                self.envoyer("MODE:MANUEL")
+                log("[BLE] Mode manuel active")
 
             # --- Commande combinee direction:puissance ---
             elif ":" in msg:

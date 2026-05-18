@@ -1,6 +1,5 @@
 import time
 from machine import Pin
-
 from ble_app import BLEApp
 
 try:
@@ -36,8 +35,19 @@ if chassis is not None and ultrason is not None:
     except Exception as e:
         print("ERREUR mode_auto:", e)
 
+# --- NOUVEAU : Initialisation du Mode Suivi de Lumière ---
+mode_lumiere = None
+if chassis is not None:
+    try:
+        from mode_lumiere import ModeSuiviLumiere
+        mode_lumiere = ModeSuiviLumiere(chassis)
+        print("Mode suivi lumière OK")
+    except Exception as e:
+        print("ERREUR mode_lumiere:", e)
+
 led = Pin("LED", Pin.OUT)
-ble = BLEApp(chassis, mode_auto=mode_auto)
+# On passe mode_lumiere à l'application BLE
+ble = BLEApp(chassis, mode_auto=mode_auto, mode_lumiere=mode_lumiere)
 
 print("Robot pret, en attente de connexion BLE...")
 
@@ -58,11 +68,17 @@ while True:
             chassis.arreter()
         if mode_auto is not None:
             mode_auto.desactiver()
+        if mode_lumiere is not None:
+            mode_lumiere.desactiver()
 
     ble_connecte_prec = connecte
 
+    # Exécution des machines à états des modes autonomes
     if mode_auto is not None and mode_auto.est_actif():
         mode_auto.mise_a_jour()
+
+    if mode_lumiere is not None and mode_lumiere.est_actif():
+        mode_lumiere.mise_a_jour()
 
     ble.tick()
     time.sleep_ms(50)
